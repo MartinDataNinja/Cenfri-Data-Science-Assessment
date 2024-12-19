@@ -1,0 +1,186 @@
+---
+title: "Code for Data Science Assissment"
+author: "Martin"
+date: "2024-12-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Required Libraries
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)       
+library(lubridate)   
+library(summarytools)
+library(rmarkdown)
+library(tidyverse)
+```
+
+### Load the dataset in R programming
+```{r}
+data_traffic = read_excel("C:/Users/GK TECH/Downloads/03 Real-Time_Traffic_Incident_Reports.xlsx")
+head(data_traffic)
+```
+
+
+## Data Validation 
+
+### Check for missing values in all variables in the dataset
+```{r}
+missing_values <- data_traffic %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Missing_Count")
+print(missing_values)
+
+```
+
+### Checking for the format of the variables in the dataset
+```{r}
+str(data_traffic)
+```
+
+### Convert Published Date and Status Date from character to Date format
+```{r}
+data_traffic <- data_traffic %>%
+  mutate(
+    Published_Date = as.Date(Published_Date, format = "%m/%d/%Y %I:%M:%S %p %z"),
+    Status_Date = as.Date(Published_Date, format = "%m/%d/%Y %I:%M:%S %p %z"))
+head(data_traffic)
+```
+
+### Check uniqueness of Traffic Report ID
+
+```{r}
+sum(duplicated(data_traffic$`Traffic Report ID`))
+
+```
+
+
+### Extract Year and Month from Published_Date to easy the analysis and aggregation
+```{r}
+data_traffic <- data_traffic %>%
+  mutate(
+    Published_Year = year(Published_Date),
+    Published_Month = month(Published_Date))
+head(data_traffic)
+```
+
+
+### Extract Year and Month from Status_Date to easy the analysis and aggregation
+```{r}
+data_traffic <- data_traffic %>%
+  mutate(
+    Status_Year = year(Status_Date),
+    Status_Month = month(Status_Date))
+head(data_traffic)
+```
+
+### Impute missing values in Status variable with "Unknown"
+```{r}
+data_traffic <- data_traffic %>%
+  mutate(
+    Status = ifelse(is.na(Status), "Unknown", as.character(Status)),
+  )
+head(data_traffic)
+```
+
+### Convert Issue Reported and Status variable into factors
+```{r}
+data_traffic_clean<- data_traffic %>%
+  mutate(
+    Issue_Reported = as.factor(Issue_Reported),
+    Status = as.factor(Status))
+head(data_traffic_clean)
+```
+
+### EDA
+### Summary statistics for all variables 
+
+```{r}
+summary(data_traffic_clean)
+```
+
+### Traffic Incidents by Year 2017-2022
+
+```{r}
+count_by_year <- data_traffic_clean %>%
+  group_by(Published_Year) %>% summarise(Count = n()) %>% arrange(desc(Count))  
+
+ggplot(count_by_year, aes(x = reorder(Published_Year, -Count), y = Count, fill = Count)) +
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = Count), vjust = -0.5, color = "black") +
+  labs(title = "Traffic Incidents by Year", x = "Year", y = "Incident Count") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank())
+
+```
+
+
+### The number of traffic incidents monthly each year. 
+
+```{r}
+count_by_month <- data_traffic_clean %>%
+  group_by(Published_Year, Published_Month) %>% summarise(Count = n()) %>% arrange(Published_Year, Published_Month)
+
+ggplot(count_by_month, aes(x = Published_Month, y = Count, group = Published_Year, color = factor(Published_Year))) +
+  geom_line() + geom_point() + geom_text(aes(label = Count), 
+            vjust = 1.5,  color = "black", size = 3, 
+            position = position_nudge(y = 5)) +  
+  labs(title = "Traffic Incidents by Month and Year", x = "Month", y = "Incident Count") +  
+  scale_x_continuous(breaks = 1:12, labels = month.abb) + 
+  scale_color_brewer(palette = "Set1") +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.ticks.x = element_blank(), 
+    legend.title = element_blank(),  
+    legend.position = "bottom" 
+  )
+
+```
+
+
+
+### Traffic Incidents by Type (Issue Reported) accross years 2017-2022
+
+```{r}
+count_by_year_type <- data_traffic_clean %>%
+  group_by(Published_Year, Issue_Reported) %>%
+  summarise(Count = n()) %>% arrange(Published_Year, desc(Count)) %>% group_by(Published_Year) %>% slice_head(n = 5) 
+total_counts <- data_traffic_clean %>% group_by(Issue_Reported) %>% summarise(Total_Count = n()) %>% arrange(desc(Total_Count))
+
+count_by_year_type <- count_by_year_type %>%
+  mutate(Issue_Reported = factor(Issue_Reported, levels = total_counts$Issue_Reported))
+
+ggplot(count_by_year_type, aes(x = reorder(Issue_Reported, -Count), y = Count, fill = Count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = 1.5, color = "black", size = 4) + 
+  labs(title = "Top 5 Issue Reported type with highest Traffic Incidents by  in Each Year", 
+       x = "Incident Type", 
+       y = "Count of Incidents") +  # Add axis labels
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +   
+  facet_wrap(~ Published_Year, scales = "free_y") +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14, face = "bold"),  
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    plot.title = element_text(size = 16, face = "bold"),  
+    axis.ticks.x = element_blank(),  
+    legend.position = "none", 
+    plot.margin = margin(10, 10, 40, 10)  
+  )
+
+```
+
+
+
+
+
